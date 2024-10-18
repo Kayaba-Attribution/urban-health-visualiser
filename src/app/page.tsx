@@ -17,10 +17,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
+import { generateImage, analyzeImage } from "../utils/imageGeneration";
 
 export default function Home() {
   const [age, setAge] = useState("");
@@ -36,6 +35,9 @@ export default function Home() {
   const [fitnessLevel, setFitnessLevel] = useState("");
   const [communityRole, setCommunityRole] = useState("");
   const [currentDate, setCurrentDate] = useState("");
+  const [generatedImages, setGeneratedImages] = useState<string[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const now = new Date();
@@ -48,18 +50,54 @@ export default function Home() {
     );
   }, []);
 
-  const generatePrompt = () => {
+  const generatePrompts = () => {
     const selectedGender = gender === "other" ? otherGender : gender;
-    return `Create a series of vibrant, inclusive health infographics for a ${age}-year-old ${selectedGender} 
-    living in ${city}, ${country} with a ${culturalBackground} background. 
-    Height: ${height}cm, Weight: ${weight}kg. Fitness level: ${fitnessLevel}.
-    Address health concerns: ${healthIssues}. 
-    Include dietary suggestions considering ${dietaryPreferences} preferences. 
-    Use local landmarks and culturally relevant imagery to make the infographics 
-    relatable and engaging. 
-    Create comparative visualizations showing potential health improvements over 3 months, 6 months, and 1 year.
-    Illustrate how their role as a ${communityRole} impacts community health.
-    Incorporate seasonal health tips and local events relevant to ${currentDate}.`;
+    const basePrompt = `Create a stylized, infographic-like image for a ${age}-year-old ${selectedGender} 
+    of ${culturalBackground} background in ${city}, ${country}. Height: ${height}cm, Weight: ${weight}kg. 
+    Health concerns: ${healthIssues}. Dietary preferences: ${dietaryPreferences}. 
+    Community role: ${communityRole}. Current date: ${currentDate}. Fitness level: ${fitnessLevel}.
+    Use a consistent color palette and style across all images. Minimize text, focusing on visual storytelling. 
+    Incorporate recognizable city landmarks and urban elements. Show realistic urban health challenges and personal adaptations.`;
+  
+    return [
+      `${basePrompt} Image 1: Current State - Depict the person in their urban environment, highlighting typical health challenges they face (e.g., busy streets, fast food options, sedentary workplace). Show their current lifestyle choices and health status through visual metaphors.`,
+      
+      `${basePrompt} Image 2: Awareness & Small Changes (1 Month) - Illustrate the person becoming aware of urban health resources. Show them researching local parks, healthy restaurants, or community programs. Depict small initial changes like using stairs instead of elevators or carrying a reusable water bottle.`,
+      
+      `${basePrompt} Image 3: Adapting to Urban Environment (3 Months) - Visualize the person actively using existing city health resources. Show them jogging in a local park, shopping at a farmer's market, or participating in a community fitness class. Highlight how they're navigating urban challenges more healthily.`,
+      
+      `${basePrompt} Image 4: Lifestyle Integration (6 Months) - Depict how healthier habits have become part of their daily routine. Show them cycling to work, preparing home-cooked meals, or using a standing desk. Illustrate improved health markers through subtle visual cues.`,
+      
+      `${basePrompt} Image 5: Community Engagement (1 Year) - Create a split image comparing their initial state with their current lifestyle. Show how they've not only improved their own health but are now contributing to community health. Depict them volunteering at a community garden, organizing a neighborhood walking group, or teaching a healthy cooking class.`
+    ];
+  };
+  const handleGenerateVisualization = async () => {
+    setIsGenerating(true);
+    setError("");
+    const prompts = generatePrompts();
+    const images = [];
+
+    try {
+      for (let i = 0; i < prompts.length; i++) {
+        let prompt = prompts[i];
+        if (i > 0) {
+          // Analyze the previous image and incorporate insights into the next prompt
+          console.log("Analyzing previous image:", images[i - 1]);
+          const analysis = await analyzeImage(images[i - 1], prompts[i - 1]);
+          prompt += ` Incorporate these elements from the previous image: ${analysis}`;
+        }
+        console.log("Generating image with prompt:", prompt);
+        const newImage = await generateImage(prompt);
+        images.push(newImage);
+      }
+
+      setGeneratedImages(images);
+    } catch (err) {
+      setError("An error occurred while generating images. Please try again.");
+      console.error(err);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -165,22 +203,46 @@ export default function Home() {
           />
         </CardContent>
         <CardFooter>
-          <Button className="w-full">Generate Health Visualization</Button>
+          <Button
+            className="w-full"
+            onClick={handleGenerateVisualization}
+            disabled={isGenerating}
+          >
+            {isGenerating ? "Generating..." : "Generate Health Visualization"}
+          </Button>
         </CardFooter>
       </Card>
 
-      <Card className="w-full max-w-2xl mx-auto mt-8">
-        <CardHeader>
-          <CardTitle>Generated Prompt</CardTitle>
-          <CardDescription>
-            This is an example of the prompt that will be used to create your
-            personalized health visualization
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Textarea readOnly value={generatePrompt()} className="h-40" />
-        </CardContent>
-      </Card>
+      {error && <div className="text-red-500 text-center mt-4">{error}</div>}
+
+      {generatedImages.length > 0 && (
+        <Card className="w-full max-w-2xl mx-auto mt-8">
+          <CardHeader>
+            <CardTitle>Your Health Journey Visualization</CardTitle>
+            <CardDescription>
+              A series of images depicting your health transformation over time
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {generatedImages.map((image, index) => (
+              <div key={index} className="relative">
+                <img
+                  src={image}
+                  alt={`Health visualization ${index + 1}`}
+                  className="w-full h-auto rounded-lg shadow-lg"
+                />
+                <span className="absolute bottom-2 right-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded">
+                  {
+                    ["Current", "3 Months", "6 Months", "1 Year", "Impact"][
+                      index
+                    ]
+                  }
+                </span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
